@@ -37,6 +37,9 @@ fun SettingsScreen(
     onDeleteEverything: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val use24Hour = android.text.format.DateFormat.is24HourFormat(
+        androidx.compose.ui.platform.LocalContext.current,
+    )
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -58,7 +61,7 @@ fun SettingsScreen(
                 Column {
                     SwitchRow(
                         title = "Weekly report",
-                        subtitle = "Covers the seven days ending yesterday",
+                        subtitle = "Covers the last complete week, Monday to Sunday",
                         checked = state.reports.weeklyEnabled,
                         onCheckedChange = onToggleWeekly,
                     )
@@ -66,7 +69,7 @@ fun SettingsScreen(
                         ValueRow(
                             title = "Send at",
                             value = "${state.reports.weeklyDay.display()} · " +
-                                Format.timeOfDay(state.reports.weeklyMinuteOfDay),
+                                Format.timeOfDay(state.reports.weeklyMinuteOfDay, use24Hour),
                             onClick = onPickWeeklyTime,
                         )
                         Spacer(Modifier.height(4.dp))
@@ -87,7 +90,7 @@ fun SettingsScreen(
                     if (state.reports.dailyEnabled) {
                         ValueRow(
                             title = "Send at",
-                            value = Format.timeOfDay(state.reports.dailyMinuteOfDay),
+                            value = Format.timeOfDay(state.reports.dailyMinuteOfDay, use24Hour),
                             onClick = onPickDailyTime,
                         )
                     }

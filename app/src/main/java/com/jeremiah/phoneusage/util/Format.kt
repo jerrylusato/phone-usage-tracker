@@ -33,8 +33,17 @@ object Format {
 
     fun count(value: Int): String = String.format(Locale.getDefault(), "%,d", value)
 
-    fun timeOfDay(minuteOfDay: Int): String =
-        String.format(Locale.getDefault(), "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
+    fun timeOfDay(minuteOfDay: Int, use24Hour: Boolean = true): String {
+        val hour = minuteOfDay / 60
+        val minute = minuteOfDay % 60
+        if (use24Hour) return String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
+        val suffix = if (hour < 12) "AM" else "PM"
+        val hour12 = when {
+            hour % 12 == 0 -> 12
+            else -> hour % 12
+        }
+        return String.format(Locale.getDefault(), "%d:%02d %s", hour12, minute, suffix)
+    }
 
     fun bytes(value: Long): String = when {
         value >= 1024L * 1024 -> String.format(Locale.getDefault(), "%.1f MB", value / (1024.0 * 1024))

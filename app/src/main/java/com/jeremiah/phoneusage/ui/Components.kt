@@ -185,7 +185,7 @@ fun AppUsageRow(
             if (showLaunches && app.launches > 0) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${Format.count(app.launches)} opens",
+                    text = "${Format.count(app.launches)} " + if (app.launches == 1) "open" else "opens",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

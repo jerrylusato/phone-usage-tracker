@@ -146,6 +146,43 @@ class UsageAggregatorTest {
     }
 
     @Test
+    fun `moving between activities inside one app is a single open`() {
+        val summary = summarize(
+            listOf(
+                LoggedEvent(at(9, 0), "android", EventTypes.SCREEN_INTERACTIVE),
+                LoggedEvent(at(9, 1), "com.whatsapp", EventTypes.ACTIVITY_RESUMED),
+                LoggedEvent(at(9, 2), "com.whatsapp", EventTypes.ACTIVITY_PAUSED),
+                LoggedEvent(at(9, 2), "com.whatsapp", EventTypes.ACTIVITY_RESUMED),
+                LoggedEvent(at(9, 3), "com.whatsapp", EventTypes.ACTIVITY_PAUSED),
+                LoggedEvent(at(9, 3), "com.whatsapp", EventTypes.ACTIVITY_RESUMED),
+                LoggedEvent(at(9, 5), "android", EventTypes.SCREEN_NON_INTERACTIVE),
+            ),
+            nowMs = at(10, 0),
+        )
+
+        // Chat list to a chat to a photo is one open, not three.
+        assertEquals(1, summary.launches)
+        assertEquals(minutes(4), summary.apps.single().timeMs)
+    }
+
+    @Test
+    fun `returning to the same app after the screen went off is a new open`() {
+        val summary = summarize(
+            listOf(
+                LoggedEvent(at(9, 0), "android", EventTypes.SCREEN_INTERACTIVE),
+                LoggedEvent(at(9, 1), "com.whatsapp", EventTypes.ACTIVITY_RESUMED),
+                LoggedEvent(at(9, 2), "android", EventTypes.SCREEN_NON_INTERACTIVE),
+                LoggedEvent(at(9, 30), "android", EventTypes.SCREEN_INTERACTIVE),
+                LoggedEvent(at(9, 31), "com.whatsapp", EventTypes.ACTIVITY_RESUMED),
+                LoggedEvent(at(9, 33), "android", EventTypes.SCREEN_NON_INTERACTIVE),
+            ),
+            nowMs = at(10, 0),
+        )
+
+        assertEquals(2, summary.launches)
+    }
+
+    @Test
     fun `days without events fall back to platform totals and are marked as estimates`() {
         val summary = summarize(
             listOf(

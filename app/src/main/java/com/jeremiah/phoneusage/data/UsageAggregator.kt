@@ -67,6 +67,8 @@ object UsageAggregator {
         }
         var currentPackage: String? = null
         var currentSince: Long? = null
+        // Tracked separately from currentPackage, which is cleared whenever an activity pauses.
+        var lastResumedPackage: String? = null
 
         fun creditApp(packageName: String?, start: Long?, end: Long) {
             if (packageName == null || start == null) return
@@ -100,21 +102,25 @@ object UsageAggregator {
                         screenOn = false
                     }
                     currentSince = null
+                    // Coming back to the same app after the screen was off is a new open.
+                    lastResumedPackage = null
                     if (event.type == EventTypes.DEVICE_SHUTDOWN) currentPackage = null
                 }
 
                 EventTypes.ACTIVITY_RESUMED -> {
                     if (event.packageName.isNotEmpty()) {
                         if (screenOn) creditApp(currentPackage, currentSince, event.timestamp)
-                        if (currentPackage != event.packageName) {
-                            // Opening an app with the screen off is not the user opening it.
-                            if (screenOn) {
-                                launchesByApp[event.packageName] =
-                                    (launchesByApp[event.packageName] ?: 0) + 1
-                                launches++
-                            }
-                            currentPackage = event.packageName
+                        // An open is a change of foreground *app*. Apps switch between their own
+                        // activities constantly while in use, and each of those pauses the
+                        // previous one — counting those would inflate busy apps several times
+                        // over. Opening an app with the screen off is not the user opening it.
+                        if (screenOn && lastResumedPackage != event.packageName) {
+                            launchesByApp[event.packageName] =
+                                (launchesByApp[event.packageName] ?: 0) + 1
+                            launches++
                         }
+                        lastResumedPackage = event.packageName
+                        currentPackage = event.packageName
                         currentSince = if (screenOn) event.timestamp else null
                         lastUsed[event.packageName] =
                             maxOf(lastUsed[event.packageName] ?: 0L, event.timestamp)

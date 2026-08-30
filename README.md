@@ -30,6 +30,10 @@ Screen time is the time the screen was **actually on**, measured from the system
 and an app only accrues time while it is in the foreground *and* the screen is on. Music playing
 with a dark screen counts for nothing.
 
+An "open" is a change of foreground *app*, counted only while the screen is on. Moving between
+an app's own screens is not an open — apps pause and resume their activities constantly while
+you use them, and counting those inflates busy apps several times over.
+
 This is deliberately not Android's `totalTimeInForeground`, which counts activity-resumed time
 and over-reports whenever a pause event is missed — that is why a phone can appear to have been
 "used" for nine hours. The platform's daily totals are still read, but only as a fallback for

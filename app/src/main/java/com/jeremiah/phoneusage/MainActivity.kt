@@ -1,7 +1,6 @@
 package com.jeremiah.phoneusage
 
 import android.Manifest
-import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -47,6 +46,7 @@ import com.jeremiah.phoneusage.report.Notifications
 import com.jeremiah.phoneusage.ui.DashboardScreen
 import com.jeremiah.phoneusage.ui.HistoryScreen
 import com.jeremiah.phoneusage.ui.PhoneUsageTheme
+import com.jeremiah.phoneusage.ui.ReportTimePickerDialog
 import com.jeremiah.phoneusage.ui.SettingsScreen
 import java.time.DayOfWeek
 
@@ -78,6 +78,8 @@ private enum class Tab { DASHBOARD, HISTORY, SETTINGS }
 
 private enum class DeleteTarget { MONTH, OLDER, ALL }
 
+private enum class TimeTarget { DAILY, WEEKLY }
+
 @Composable
 private fun AppRoot(viewModel: UsageViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -86,6 +88,7 @@ private fun AppRoot(viewModel: UsageViewModel) {
 
     var tab by remember { mutableStateOf(Tab.DASHBOARD) }
     var deleteTarget by remember { mutableStateOf<DeleteTarget?>(null) }
+    var timeTarget by remember { mutableStateOf<TimeTarget?>(null) }
     var exportAll by remember { mutableStateOf(true) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -168,13 +171,9 @@ private fun AppRoot(viewModel: UsageViewModel) {
                     onOpenNotificationSettings = { openNotificationSettings(context) },
                     onRequestUnrestrictedBattery = { requestUnrestrictedBattery(context) },
                     onToggleDaily = viewModel::setDailyReport,
-                    onPickDailyTime = {
-                        pickTime(context, state.reports.dailyMinuteOfDay, viewModel::setDailyReportTime)
-                    },
+                    onPickDailyTime = { timeTarget = TimeTarget.DAILY },
                     onToggleWeekly = viewModel::setWeeklyReport,
-                    onPickWeeklyTime = {
-                        pickTime(context, state.reports.weeklyMinuteOfDay, viewModel::setWeeklyReportTime)
-                    },
+                    onPickWeeklyTime = { timeTarget = TimeTarget.WEEKLY },
                     onPickWeeklyDay = { day: DayOfWeek -> viewModel.setWeeklyReportDay(day) },
                     onPreviewReport = viewModel::previewReport,
                     onExportAll = {
@@ -196,6 +195,25 @@ private fun AppRoot(viewModel: UsageViewModel) {
             text = { Text(report.body, style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(onClick = viewModel::dismissPreview) { Text("Close") }
+            },
+        )
+    }
+
+    timeTarget?.let { target ->
+        val current = when (target) {
+            TimeTarget.DAILY -> state.reports.dailyMinuteOfDay
+            TimeTarget.WEEKLY -> state.reports.weeklyMinuteOfDay
+        }
+        ReportTimePickerDialog(
+            minuteOfDay = current,
+            is24Hour = DateFormat.is24HourFormat(context),
+            onDismiss = { timeTarget = null },
+            onConfirm = { minuteOfDay ->
+                when (target) {
+                    TimeTarget.DAILY -> viewModel.setDailyReportTime(minuteOfDay)
+                    TimeTarget.WEEKLY -> viewModel.setWeeklyReportTime(minuteOfDay)
+                }
+                timeTarget = null
             },
         )
     }
@@ -232,16 +250,6 @@ private fun AppRoot(viewModel: UsageViewModel) {
             },
         )
     }
-}
-
-private fun pickTime(context: Context, minuteOfDay: Int, onPicked: (Int) -> Unit) {
-    TimePickerDialog(
-        context,
-        { _, hour, minute -> onPicked(hour * 60 + minute) },
-        minuteOfDay / 60,
-        minuteOfDay % 60,
-        DateFormat.is24HourFormat(context),
-    ).show()
 }
 
 private fun openUsageAccessSettings(context: Context) {
