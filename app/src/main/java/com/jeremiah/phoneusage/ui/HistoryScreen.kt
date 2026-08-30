@@ -69,7 +69,7 @@ fun HistoryScreen(
                 SectionCard(
                     title = MonthKeys.parseMonth(state.selectedMonth)
                         ?.let { Format.monthTitle(it.atDay(1)) } ?: state.selectedMonth,
-                    subtitle = "${Format.duration(month.totalForegroundMs)} total · " +
+                    subtitle = "${Format.duration(month.screenTimeMs)} screen time · " +
                         "avg ${Format.duration(month.dailyAverageMs)}/day · " +
                         "${month.daysWithData} day(s) with data",
                 ) {
@@ -88,8 +88,8 @@ fun HistoryScreen(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             StatTile(
-                                label = "Screen on",
-                                value = Format.duration(month.screenOnMs),
+                                label = "In apps",
+                                value = Format.duration(month.appTimeMs),
                                 modifier = Modifier.weight(1f),
                             )
                             StatTile(
@@ -111,6 +111,7 @@ fun HistoryScreen(
                                 data = month.dailyTotals.toList(),
                                 barWidth = 22.dp,
                                 selected = selectedDay,
+                                estimated = month.estimatedDays,
                                 onSelect = { day -> selectedDay = if (selectedDay == day) null else day },
                             )
                         }
@@ -133,11 +134,11 @@ fun HistoryScreen(
             item {
                 SectionCard(
                     title = "Every app",
-                    subtitle = "${month.apps.count { it.foregroundMs > 0L }} apps with recorded time",
+                    subtitle = "${month.apps.count { it.timeMs > 0L }} apps with recorded time",
                 ) {
                     Column {
-                        val apps = month.apps.filter { it.foregroundMs > 0L || it.launches > 0 }
-                        val max = apps.maxOfOrNull { it.foregroundMs } ?: 1L
+                        val apps = month.apps.filter { it.timeMs > 0L || it.launches > 0 }
+                        val max = apps.maxOfOrNull { it.timeMs } ?: 1L
                         apps.forEach { app -> AppUsageRow(app = app, maxMs = max) }
                     }
                 }

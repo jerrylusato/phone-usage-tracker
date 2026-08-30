@@ -24,12 +24,22 @@ The signed APK is at `app/build/outputs/apk/release/app-release.apk`.
 
 Or install over USB with `adb install -r app/build/outputs/apk/release/app-release.apk`.
 
-## What it records
+## What "screen time" means here
 
-| Source | Data | Why |
+Screen time is the time the screen was **actually on**, measured from the system event stream,
+and an app only accrues time while it is in the foreground *and* the screen is on. Music playing
+with a dark screen counts for nothing.
+
+This is deliberately not Android's `totalTimeInForeground`, which counts activity-resumed time
+and over-reports whenever a pause event is missed — that is why a phone can appear to have been
+"used" for nine hours. The platform's daily totals are still read, but only as a fallback for
+days that have no events of their own (before the app was installed, or after a long gap). Those
+days are labelled as estimates in the UI and drawn as faded bars.
+
+| Source | Data | Used for |
 | --- | --- | --- |
-| `UsageStatsManager.queryEvents` | app opened/paused/stopped, screen on/off, lock/unlock, foreground service start/stop, boots, user interactions | app launch counts, unlocks, screen-on time, sessions |
-| `UsageStatsManager.queryAndAggregateUsageStats` | per-day, per-app foreground milliseconds | accurate screen-time totals that survive collection gaps |
+| `UsageStatsManager.queryEvents` | app resumed/paused/stopped, screen on/off, lock/unlock, foreground service start/stop, boots, interactions | screen time, per-app time, launches, unlocks, sessions |
+| `UsageStatsManager.queryUsageStats(INTERVAL_DAILY)` | per-day, per-app foreground milliseconds | estimated fallback for days with no events |
 
 It never touches messages, contacts, call logs, location, camera, microphone or clipboard, and
 it does not read the content of any app.
@@ -39,12 +49,18 @@ report fires. It is deliberately **not** a permanent foreground service: Android
 recent usage history, so a missed run is backfilled by the next one, and Android 15+ shuts down
 long-running `dataSync` foreground services anyway.
 
+Daily totals are only requested for the last seven days, because that is roughly as far back as
+Android keeps day-resolution buckets. Older queries come back as weekly or monthly buckets, and
+recording one of those as a single day is what made earlier builds report weeks of 260 hours.
+Buckets spanning far more than a day are now rejected, and days already stored with impossible
+totals are removed once, on first run of this version.
+
 ## Reports
 
 Configured under **Settings → Reports**:
 
-- **Weekly** (on by default) — pick weekday and time. Covers the seven complete days ending
-  yesterday and compares them with the seven before.
+- **Weekly** (on by default) — pick weekday and time. Covers the last complete calendar week,
+  Monday to Sunday, and compares it with the week before.
 - **Daily** (off by default) — pick a time. Before noon it reports yesterday; from midday on it
   reports today so far.
 
@@ -86,6 +102,13 @@ Release signing reads `keystore.properties` and `release.keystore` from the repo
 Both are gitignored, and they exist only on the machine that built the APK. **Keep a backup**:
 Android will refuse to update an installed APK that is signed with a different key. Without
 those files `assembleRelease` still runs, producing an unsigned APK.
+
+## Weeks
+
+Weeks run **Monday to Sunday**. The dashboard chart and the app list both switch between *This
+week* and *Last week*, and the app list adds *Today*. While the current week is still running,
+"vs last week" compares it against the same slice of last week — Monday through the same
+weekday — because measuring a part-finished week against a whole one always invents a drop.
 
 ## Layout
 

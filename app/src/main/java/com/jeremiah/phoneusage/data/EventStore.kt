@@ -81,26 +81,53 @@ class EventStore(filesDir: File) {
     // ----------------------------------------------------------- daily totals
 
     /**
-     * Merges freshly queried per-day totals into storage, keeping the larger of the two
-     * values for each app. Merging upwards means a day that the platform has already
-     * forgotten (and now reports as zero) never erases numbers already recorded.
+     * Writes freshly queried per-day totals, replacing whatever was stored for those days.
+     *
+     * Replacement rather than merging matters: only days Android still reports at daily
+     * resolution are ever queried, so the new numbers are authoritative, and a day recorded
+     * badly by an earlier version has to be able to shrink. Days that are not part of [perDay]
+     * are left untouched.
      */
-    fun mergeDailyTotals(perDay: Map<LocalDate, Map<String, Long>>) {
+    fun replaceDailyTotals(perDay: Map<LocalDate, Map<String, Long>>) {
         if (perDay.isEmpty()) return
         perDay.entries.groupBy { MonthKeys.monthOf(it.key) }.forEach { (month, entries) ->
             val file = File(dailyDir, "$month.json")
             val existing = readJson(file)
             entries.forEach { (day, totals) ->
-                val dayKey = day.toString()
-                val dayJson = existing.optJSONObject(dayKey) ?: JSONObject()
-                totals.forEach { (pkg, ms) ->
-                    if (ms > dayJson.optLong(pkg, 0L)) dayJson.put(pkg, ms)
-                }
-                existing.put(dayKey, dayJson)
+                val dayJson = JSONObject()
+                totals.forEach { (pkg, ms) -> dayJson.put(pkg, ms) }
+                existing.put(day.toString(), dayJson)
             }
             runCatching { file.writeText(existing.toString(), Charsets.UTF_8) }
                 .onFailure { Log.w(TAG, "Could not write daily totals for $month", it) }
         }
+    }
+
+    /**
+     * Drops days whose totals cannot be real — the coarse-bucket inflation written by earlier
+     * versions, where a day could claim far more usage than a day contains. The underlying
+     * per-day numbers are gone from the platform by now, so those days are removed rather than
+     * repaired. Returns how many were dropped.
+     */
+    fun pruneImplausibleDays(): Int {
+        var removed = 0
+        dailyDir.listFiles()?.forEach { file ->
+            val month = file.name.substringBeforeLast('.')
+            if (MonthKeys.parseMonth(month) == null) return@forEach
+            val json = readJson(file)
+            val doomed = json.keys().asSequence().filter { dayKey ->
+                val dayJson = json.optJSONObject(dayKey) ?: return@filter false
+                val totals = dayJson.keys().asSequence()
+                    .associateWith { dayJson.optLong(it, 0L) }
+                DailyTotals.isImplausible(totals)
+            }.toList()
+            if (doomed.isEmpty()) return@forEach
+            doomed.forEach { json.remove(it) }
+            removed += doomed.size
+            runCatching { file.writeText(json.toString(), Charsets.UTF_8) }
+                .onFailure { Log.w(TAG, "Could not rewrite daily totals for $month", it) }
+        }
+        return removed
     }
 
     fun readDailyTotals(months: Collection<String>): Map<LocalDate, Map<String, Long>> {

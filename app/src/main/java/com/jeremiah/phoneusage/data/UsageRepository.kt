@@ -17,7 +17,20 @@ class UsageRepository(context: Context) {
 
     fun hasUsageAccess(): Boolean = collector.hasUsageAccess()
 
-    fun collect(nowMs: Long = System.currentTimeMillis()): CollectResult = collector.collect(nowMs)
+    fun collect(nowMs: Long = System.currentTimeMillis()): CollectResult {
+        repairStoredDataOnce()
+        return collector.collect(nowMs)
+    }
+
+    /**
+     * Earlier versions recorded days from coarse weekly buckets, producing days with more
+     * usage than a day can hold. They are removed the first time this version runs.
+     */
+    private fun repairStoredDataOnce() {
+        if (prefs.dailyDataRepaired) return
+        store.pruneImplausibleDays()
+        prefs.dailyDataRepaired = true
+    }
 
     fun summarize(
         from: LocalDate,
@@ -33,6 +46,34 @@ class UsageRepository(context: Context) {
             zone = ZoneId.systemDefault(),
             nowMs = nowMs,
         )
+    }
+
+    /**
+     * Summarises several ranges in one pass. The dashboard needs today, yesterday, this week,
+     * last week and two comparison windows at once; reading each month's files once instead of
+     * once per range keeps that to a single trip through storage.
+     */
+    fun summarizeMany(
+        ranges: List<ClosedRange<LocalDate>>,
+        nowMs: Long = System.currentTimeMillis(),
+    ): List<PeriodSummary> {
+        if (ranges.isEmpty()) return emptyList()
+        val earliest = ranges.minOf { it.start }
+        val latest = ranges.maxOf { it.endInclusive }
+        val months = monthKeysBetween(earliest, latest)
+        val events = store.readEvents(months)
+        val daily = store.readDailyTotals(months)
+        val zone = ZoneId.systemDefault()
+        return ranges.map { range ->
+            UsageAggregator.summarize(
+                from = range.start,
+                to = range.endInclusive,
+                events = events,
+                daily = daily,
+                zone = zone,
+                nowMs = nowMs,
+            )
+        }
     }
 
     fun summarizeMonth(monthKey: String, nowMs: Long = System.currentTimeMillis()): PeriodSummary? {

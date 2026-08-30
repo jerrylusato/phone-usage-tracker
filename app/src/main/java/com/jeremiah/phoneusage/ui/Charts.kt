@@ -80,6 +80,10 @@ fun DailyBarChart(
     barWidth: Dp = 26.dp,
     height: Dp = 120.dp,
     selected: LocalDate? = null,
+    /** Drawn in the accent colour when nothing is selected — used to mark today. */
+    highlight: LocalDate? = null,
+    /** Days filled in from Android's daily totals rather than measured, drawn faded. */
+    estimated: Set<LocalDate> = emptySet(),
     labels: Boolean = true,
     onSelect: (LocalDate) -> Unit = {},
 ) {
@@ -87,6 +91,7 @@ fun DailyBarChart(
     val max = (data.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
     val primary = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    val faded = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
     val track = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
 
     Row(
@@ -116,7 +121,14 @@ fun DailyBarChart(
                             .fillMaxWidth()
                             .fillMaxHeight(if (value > 0L) fraction.coerceAtLeast(0.04f) else 0f)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (day == selected) primary else muted),
+                            .background(
+                                when {
+                                    day == selected -> primary
+                                    selected == null && day == highlight -> primary
+                                    day in estimated -> faded
+                                    else -> muted
+                                },
+                            ),
                     )
                 }
                 if (labels) {

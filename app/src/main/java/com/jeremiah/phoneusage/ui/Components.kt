@@ -172,14 +172,14 @@ fun AppUsageRow(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = Format.duration(app.foregroundMs),
+                    text = Format.duration(app.timeMs),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(Modifier.height(6.dp))
             UsageBar(
-                fraction = if (maxMs > 0L) app.foregroundMs.toFloat() / maxMs.toFloat() else 0f,
+                fraction = if (maxMs > 0L) app.timeMs.toFloat() / maxMs.toFloat() else 0f,
                 modifier = Modifier.fillMaxWidth(),
             )
             if (showLaunches && app.launches > 0) {

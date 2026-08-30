@@ -27,6 +27,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_TRACKING, true)
         set(value) = sp.edit().putBoolean(KEY_TRACKING, value).apply()
 
+    /** One-off flag: whether inflated days written by earlier versions were cleaned out. */
+    var dailyDataRepaired: Boolean
+        get() = sp.getBoolean(KEY_DATA_REPAIRED, false)
+        set(value) = sp.edit().putBoolean(KEY_DATA_REPAIRED, value).apply()
+
     // --------------------------------------------------------- report schedule
 
     var dailyReportEnabled: Boolean
@@ -63,6 +68,7 @@ class Prefs(context: Context) {
         const val KEY_LAST_DAILY = "last_daily_rollup_day"
         const val KEY_LAST_COLLECTED = "last_collected_at"
         const val KEY_TRACKING = "tracking_enabled"
+        const val KEY_DATA_REPAIRED = "daily_data_repaired_v2"
         const val KEY_DAILY_ENABLED = "daily_report_enabled"
         const val KEY_DAILY_TIME = "daily_report_minute"
         const val KEY_WEEKLY_ENABLED = "weekly_report_enabled"

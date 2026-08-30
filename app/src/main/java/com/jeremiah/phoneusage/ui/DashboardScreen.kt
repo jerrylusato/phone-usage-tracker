@@ -16,6 +16,13 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
+/** Which period the week chart and the app list are showing. */
+private enum class Scope(val label: String, val short: String) {
+    TODAY("Today", "Today"),
+    THIS_WEEK("This week", "This wk"),
+    LAST_WEEK("Last week", "Last wk"),
+}
+
 @Composable
 fun DashboardScreen(
     state: UiState,
@@ -24,10 +31,16 @@ fun DashboardScreen(
     onOpenHistory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val today = state.today
-    val week = state.week
-    var appScope by remember { mutableStateOf(AppScope.TODAY) }
+    val today = remember { LocalDate.now(ZoneId.systemDefault()) }
+    var weekScope by remember { mutableStateOf(Scope.THIS_WEEK) }
+    var appScope by remember { mutableStateOf(Scope.TODAY) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
+
+    fun summaryFor(scope: Scope): PeriodSummary? = when (scope) {
+        Scope.TODAY -> state.today
+        Scope.THIS_WEEK -> state.thisWeek
+        Scope.LAST_WEEK -> state.lastWeek
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -40,28 +53,45 @@ fun DashboardScreen(
             item { UsageAccessCard(onGrantUsageAccess) }
         }
 
-        item { TodayHero(today = today, week = week, yesterday = state.yesterday) }
+        item { TodayHero(today = state.today, week = state.thisWeek, yesterday = state.yesterday) }
+
+        item { TodayStats(state.today) }
 
         item {
-            TodayStats(today)
-        }
-
-        if (week != null) {
-            item {
-                SectionCard(
-                    title = "Last 7 days",
-                    subtitle = buildString {
-                        append(Format.duration(week.totalForegroundMs))
-                        append(" total · avg ")
-                        append(Format.duration(week.dailyAverageMs))
-                        Format.delta(week.totalForegroundMs, state.previousWeek?.totalForegroundMs ?: 0L)
-                            ?.let { append(" · $it vs previous week") }
-                    },
-                ) {
+            val week = summaryFor(weekScope)
+            val comparison = when (weekScope) {
+                Scope.LAST_WEEK -> state.weekBeforeLast
+                else -> state.lastWeekToDate
+            }
+            val comparisonLabel = when (weekScope) {
+                Scope.LAST_WEEK -> "vs the week before"
+                else -> "vs the same days last week"
+            }
+            SectionCard(
+                title = weekScope.label,
+                subtitle = week?.let { weekSubtitle(it, comparison, comparisonLabel) },
+                trailing = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ScopeChip(Scope.THIS_WEEK.label, weekScope == Scope.THIS_WEEK) {
+                            weekScope = Scope.THIS_WEEK
+                            selectedDay = null
+                        }
+                        ScopeChip(Scope.LAST_WEEK.label, weekScope == Scope.LAST_WEEK) {
+                            weekScope = Scope.LAST_WEEK
+                            selectedDay = null
+                        }
+                    }
+                },
+            ) {
+                if (week == null || week.dailyTotals.isEmpty()) {
+                    EmptyState("Nothing recorded for this week yet.")
+                } else {
                     Column {
                         DailyBarChart(
                             data = week.dailyTotals.toList(),
                             selected = selectedDay,
+                            highlight = today.takeIf { weekScope == Scope.THIS_WEEK },
+                            estimated = week.estimatedDays,
                             onSelect = { day -> selectedDay = if (selectedDay == day) null else day },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -70,8 +100,18 @@ fun DashboardScreen(
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 text = "${Format.weekday(day)} ${Format.dayMonth(day)} · " +
-                                    Format.duration(week.dailyTotals[day] ?: 0L),
+                                    Format.duration(week.dailyTotals[day] ?: 0L) +
+                                    if (day in week.estimatedDays) " (estimated)" else "",
                                 style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (week.hasEstimates) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Faded bars predate this app and come from Android's own " +
+                                    "daily totals, which count app time rather than screen time.",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -81,18 +121,19 @@ fun DashboardScreen(
         }
 
         item {
-            val source = if (appScope == AppScope.TODAY) today else week
+            val source = summaryFor(appScope)
             SectionCard(
                 title = "Top apps",
-                subtitle = if (appScope == AppScope.TODAY) "Today" else "Last 7 days",
+                subtitle = appScope.label,
                 trailing = {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ScopeChip("Today", appScope == AppScope.TODAY) { appScope = AppScope.TODAY }
-                        ScopeChip("7 days", appScope == AppScope.WEEK) { appScope = AppScope.WEEK }
+                        Scope.entries.forEach { scope ->
+                            ScopeChip(scope.short, appScope == scope) { appScope = scope }
+                        }
                     }
                 },
             ) {
-                val apps = source?.apps?.filter { it.foregroundMs > 0L }?.take(6).orEmpty()
+                val apps = source?.apps?.filter { it.timeMs > 0L }?.take(6).orEmpty()
                 if (apps.isEmpty()) {
                     EmptyState(
                         if (state.hasUsageAccess) {
@@ -103,7 +144,7 @@ fun DashboardScreen(
                     )
                 } else {
                     Column {
-                        val max = apps.first().foregroundMs
+                        val max = apps.first().timeMs
                         apps.forEach { app -> AppUsageRow(app = app, maxMs = max) }
                         Spacer(Modifier.height(4.dp))
                         TextButton(onClick = onOpenHistory) { Text("See every app and month") }
@@ -116,7 +157,18 @@ fun DashboardScreen(
     }
 }
 
-private enum class AppScope { TODAY, WEEK }
+private fun weekSubtitle(
+    week: PeriodSummary,
+    comparison: PeriodSummary?,
+    comparisonLabel: String,
+): String = buildString {
+    append(Format.duration(week.screenTimeMs))
+    append(" screen time · avg ")
+    append(Format.duration(week.dailyAverageMs))
+    Format.delta(week.screenTimeMs, comparison?.screenTimeMs ?: 0L)?.let {
+        append(" · $it $comparisonLabel")
+    }
+}
 
 @Composable
 private fun Greeting(state: UiState) {
@@ -168,10 +220,10 @@ private fun UsageAccessCard(onGrant: () -> Unit) {
 
 @Composable
 private fun TodayHero(today: PeriodSummary?, week: PeriodSummary?, yesterday: PeriodSummary?) {
-    val total = today?.totalForegroundMs ?: 0L
+    val total = today?.screenTimeMs ?: 0L
     val reference = maxOf(
         week?.dailyTotals?.values?.maxOrNull() ?: 0L,
-        yesterday?.totalForegroundMs ?: 0L,
+        yesterday?.screenTimeMs ?: 0L,
         1L,
     )
     SectionCard {
@@ -187,7 +239,7 @@ private fun TodayHero(today: PeriodSummary?, week: PeriodSummary?, yesterday: Pe
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "screen time",
+                        text = "screen on",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -196,7 +248,7 @@ private fun TodayHero(today: PeriodSummary?, week: PeriodSummary?, yesterday: Pe
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Today", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Format.delta(total, yesterday?.totalForegroundMs ?: 0L)?.let { delta ->
+                Format.delta(total, yesterday?.screenTimeMs ?: 0L)?.let { delta ->
                     Pill(
                         text = "$delta vs yesterday",
                         container = if (delta.startsWith("-")) {
@@ -207,12 +259,12 @@ private fun TodayHero(today: PeriodSummary?, week: PeriodSummary?, yesterday: Pe
                     )
                 }
                 Text(
-                    text = "Yesterday " + Format.duration(yesterday?.totalForegroundMs ?: 0L),
+                    text = "Yesterday " + Format.duration(yesterday?.screenTimeMs ?: 0L),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "${today?.apps?.count { it.foregroundMs > 0L } ?: 0} apps used",
+                    text = "${today?.apps?.count { it.timeMs > 0L } ?: 0} apps used",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -238,8 +290,9 @@ private fun TodayStats(today: PeriodSummary?) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatTile(
-                label = "Screen on",
-                value = Format.duration(today?.screenOnMs ?: 0L),
+                label = "In apps",
+                value = Format.duration(today?.appTimeMs ?: 0L),
+                hint = "of your screen time",
                 modifier = Modifier.weight(1f),
             )
             StatTile(

@@ -104,12 +104,15 @@ class UsageCollector(context: Context) {
         val zone = ZoneId.systemDefault()
         val today = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
         val lastRollup = prefs.lastDailyRollupDay
-        // Always redo today and yesterday: today is still growing, yesterday may have been
-        // captured before midnight.
+        // Only days Android still holds at daily resolution are worth asking about; older days
+        // answer with weekly or monthly buckets, which are useless as per-day figures.
+        val earliest = today.minusDays(DAILY_BACKFILL_DAYS)
         val from = if (lastRollup == null) {
-            today.minusDays(DAILY_BACKFILL_DAYS)
+            earliest
         } else {
-            minOf(lastRollup, today.minusDays(1))
+            // Always redo today and yesterday: today is still growing, and yesterday may have
+            // been captured before midnight.
+            maxOf(earliest, minOf(lastRollup, today.minusDays(1)))
         }
 
         val perDay = LinkedHashMap<LocalDate, Map<String, Long>>()
@@ -118,23 +121,53 @@ class UsageCollector(context: Context) {
             val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
             val end = minOf(day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), nowMs)
             if (end > start) {
-                runCatching { manager.queryAndAggregateUsageStats(start, end) }
-                    .onSuccess { stats ->
-                        val totals = HashMap<String, Long>()
-                        stats.forEach { (pkg, usage) ->
-                            val ms = usage.totalTimeInForeground
-                            if (ms > 0L) totals[pkg] = ms
-                        }
-                        if (totals.isNotEmpty()) perDay[day] = totals
-                    }
-                    .onFailure { Log.w(TAG, "Daily query failed for $day", it) }
+                val totals = dailyTotalsFor(manager, start, end)
+                if (totals.isNotEmpty()) perDay[day] = totals
             }
             day = day.plusDays(1)
         }
 
-        store.mergeDailyTotals(perDay)
+        store.replaceDailyTotals(perDay)
         prefs.lastDailyRollupDay = today
         return perDay.size
+    }
+
+    /**
+     * One day's per-app foreground totals.
+     *
+     * `queryUsageStats(INTERVAL_DAILY, ...)` is used rather than `queryAndAggregateUsageStats`
+     * because the latter silently folds in weekly and monthly buckets once a day ages out of
+     * daily retention, reporting a whole week of usage as a single day. Buckets that span far
+     * more than a day are rejected for the same reason, and no app can exceed the window.
+     */
+    private fun dailyTotalsFor(
+        manager: UsageStatsManager,
+        dayStart: Long,
+        dayEnd: Long,
+    ): Map<String, Long> {
+        val buckets = runCatching {
+            manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, dayStart, dayEnd)
+        }.onFailure { Log.w(TAG, "Daily query failed for $dayStart", it) }.getOrNull()
+            ?: return emptyMap()
+
+        val window = dayEnd - dayStart
+        val totals = HashMap<String, Long>()
+        buckets.forEach { bucket ->
+            if (!DailyTotals.acceptsBucket(
+                    bucketStart = bucket.firstTimeStamp,
+                    bucketEnd = bucket.lastTimeStamp,
+                    dayStart = dayStart,
+                    dayEnd = dayEnd,
+                )
+            ) {
+                return@forEach
+            }
+            val packageName = bucket.packageName ?: return@forEach
+            val ms = bucket.totalTimeInForeground
+            if (ms <= 0L) return@forEach
+            totals[packageName] = DailyTotals.cap((totals[packageName] ?: 0L) + ms, window)
+        }
+        return totals
     }
 
     private companion object {
@@ -142,7 +175,7 @@ class UsageCollector(context: Context) {
 
         /** On a fresh install, pull in whatever history the platform still holds. */
         const val FIRST_RUN_BACKFILL_MS = 30L * 24 * 60 * 60 * 1000
-        const val DAILY_BACKFILL_DAYS = 60L
+        const val DAILY_BACKFILL_DAYS = 7L
         const val CURSOR_OVERLAP_MS = 60_000L
     }
 }

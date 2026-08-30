@@ -3,6 +3,7 @@ package com.jeremiah.phoneusage.report
 import android.content.Context
 import com.jeremiah.phoneusage.data.PeriodSummary
 import com.jeremiah.phoneusage.data.UsageRepository
+import com.jeremiah.phoneusage.data.Weeks
 import com.jeremiah.phoneusage.util.AppLabels
 import com.jeremiah.phoneusage.util.Format
 import java.time.LocalDate
@@ -26,10 +27,10 @@ object ReportBuilder {
         return day to day
     }
 
-    /** The seven complete days ending yesterday. */
+    /** The last complete calendar week, Monday to Sunday. */
     fun weeklyRange(today: LocalDate): Pair<LocalDate, LocalDate> {
-        val end = today.minusDays(1)
-        return end.minusDays(6) to end
+        val week = Weeks.lastWeek(today)
+        return week.start to week.endInclusive
     }
 
     fun daily(
@@ -43,7 +44,7 @@ object ReportBuilder {
         val isToday = to == now.toLocalDate()
         val heading = if (isToday) "Today so far" else Format.weekday(to) + ", " + Format.dayMonth(to)
         return Report(
-            title = "$heading · ${Format.duration(summary.totalForegroundMs)}",
+            title = "$heading · ${Format.duration(summary.screenTimeMs)}",
             body = body(context, summary, previous, if (isToday) "yesterday" else "the day before"),
             summary = summary,
         )
@@ -56,9 +57,10 @@ object ReportBuilder {
     ): Report {
         val (from, to) = weeklyRange(today)
         val summary = repository.summarize(from, to)
-        val previous = repository.summarize(from.minusDays(7), from.minusDays(1))
+        val previous = repository.summarize(from.minusWeeks(1), to.minusWeeks(1))
         return Report(
-            title = "Week of ${Format.dayMonth(from)} · ${Format.duration(summary.totalForegroundMs)}",
+            title = "${Format.dayMonth(from)} – ${Format.dayMonth(to)} · " +
+                Format.duration(summary.screenTimeMs),
             body = body(context, summary, previous, "the week before"),
             summary = summary,
         )
@@ -84,22 +86,22 @@ object ReportBuilder {
             lines += "Average ${Format.duration(summary.dailyAverageMs)}/day$busiestText"
         }
 
-        val top = summary.apps.filter { it.foregroundMs > 0L }.take(3)
+        val top = summary.apps.filter { it.timeMs > 0L }.take(3)
         if (top.isNotEmpty()) {
             lines += "Top: " + top.joinToString(" · ") {
-                "${AppLabels.label(context, it.packageName)} ${Format.duration(it.foregroundMs)}"
+                "${AppLabels.label(context, it.packageName)} ${Format.duration(it.timeMs)}"
             }
         }
 
         val activity = buildList {
             if (summary.unlocks > 0) add("${Format.count(summary.unlocks)} unlocks")
             if (summary.launches > 0) add("${Format.count(summary.launches)} app opens")
-            if (summary.screenOnMs > 0) add("screen on ${Format.duration(summary.screenOnMs)}")
+            if (summary.appTimeMs > 0) add("${Format.duration(summary.appTimeMs)} in apps")
         }
         if (activity.isNotEmpty()) lines += activity.joinToString(" · ")
 
-        Format.delta(summary.totalForegroundMs, previous.totalForegroundMs)?.let {
-            lines += "$it vs $previousLabel (${Format.duration(previous.totalForegroundMs)})"
+        Format.delta(summary.screenTimeMs, previous.screenTimeMs)?.let {
+            lines += "$it vs $previousLabel (${Format.duration(previous.screenTimeMs)})"
         }
 
         return lines.joinToString("\n")

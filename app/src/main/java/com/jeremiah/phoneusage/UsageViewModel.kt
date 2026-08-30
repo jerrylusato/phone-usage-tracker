@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.jeremiah.phoneusage.data.MonthKeys
 import com.jeremiah.phoneusage.data.PeriodSummary
 import com.jeremiah.phoneusage.data.UsageRepository
+import com.jeremiah.phoneusage.data.Weeks
 import com.jeremiah.phoneusage.report.ReportBuilder
 import com.jeremiah.phoneusage.report.ReportScheduler
 import com.jeremiah.phoneusage.work.CollectWorker
@@ -42,8 +43,12 @@ data class UiState(
     val lastCollectedAt: Long = 0L,
     val today: PeriodSummary? = null,
     val yesterday: PeriodSummary? = null,
-    val week: PeriodSummary? = null,
-    val previousWeek: PeriodSummary? = null,
+    /** Monday to Sunday of the current week; days still ahead read as no data. */
+    val thisWeek: PeriodSummary? = null,
+    val lastWeek: PeriodSummary? = null,
+    /** Monday through today's weekday, one week back — the honest partial-week comparison. */
+    val lastWeekToDate: PeriodSummary? = null,
+    val weekBeforeLast: PeriodSummary? = null,
     val months: List<String> = emptyList(),
     val selectedMonth: String = MonthKeys.currentMonth(),
     val month: PeriodSummary? = null,
@@ -89,8 +94,10 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     lastCollectedAt = snapshot.lastCollectedAt,
                     today = snapshot.today,
                     yesterday = snapshot.yesterday,
-                    week = snapshot.week,
-                    previousWeek = snapshot.previousWeek,
+                    thisWeek = snapshot.thisWeek,
+                    lastWeek = snapshot.lastWeek,
+                    lastWeekToDate = snapshot.lastWeekToDate,
+                    weekBeforeLast = snapshot.weekBeforeLast,
                     months = snapshot.months,
                     selectedMonth = snapshot.selectedMonth,
                     month = snapshot.month,
@@ -110,8 +117,10 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         val lastCollectedAt: Long,
         val today: PeriodSummary,
         val yesterday: PeriodSummary,
-        val week: PeriodSummary,
-        val previousWeek: PeriodSummary,
+        val thisWeek: PeriodSummary,
+        val lastWeek: PeriodSummary,
+        val lastWeekToDate: PeriodSummary,
+        val weekBeforeLast: PeriodSummary,
         val months: List<String>,
         val selectedMonth: String,
         val month: PeriodSummary?,
@@ -126,16 +135,27 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         val month = if (months.contains(requestedMonth)) requestedMonth else months.firstOrNull()
             ?: MonthKeys.currentMonth()
         val prefs = repository.prefs
+        val ranges = listOf(
+            today..today,
+            today.minusDays(1)..today.minusDays(1),
+            Weeks.thisWeek(today),
+            Weeks.lastWeek(today),
+            Weeks.sameSliceLastWeek(today),
+            Weeks.weekBeforeLast(today),
+        )
+        val summaries = repository.summarizeMany(ranges)
         return Snapshot(
             hasUsageAccess = repository.hasUsageAccess(),
             trackingEnabled = prefs.trackingEnabled,
             notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled(),
             batteryUnrestricted = isBatteryUnrestricted(context),
             lastCollectedAt = prefs.lastCollectedAt,
-            today = repository.summarize(today, today),
-            yesterday = repository.summarize(today.minusDays(1), today.minusDays(1)),
-            week = repository.summarize(today.minusDays(6), today),
-            previousWeek = repository.summarize(today.minusDays(13), today.minusDays(7)),
+            today = summaries[0],
+            yesterday = summaries[1],
+            thisWeek = summaries[2],
+            lastWeek = summaries[3],
+            lastWeekToDate = summaries[4],
+            weekBeforeLast = summaries[5],
             months = months,
             selectedMonth = month,
             month = repository.summarizeMonth(month),
