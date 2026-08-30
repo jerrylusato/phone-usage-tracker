@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jeremiah.phoneusage.UiState
+import com.jeremiah.phoneusage.data.MonthKeys
 import com.jeremiah.phoneusage.util.Format
 import java.time.DayOfWeek
 import java.time.format.TextStyle
@@ -37,6 +38,9 @@ fun SettingsScreen(
     onDeleteEverything: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val monthLabel = MonthKeys.parseMonth(state.selectedMonth)
+        ?.let { Format.monthTitle(it.atDay(1)) }
+        ?: state.selectedMonth
     val use24Hour = android.text.format.DateFormat.is24HourFormat(
         androidx.compose.ui.platform.LocalContext.current,
     )
@@ -179,11 +183,11 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onDeleteMonth, modifier = Modifier.fillMaxWidth()) {
-                        Text("Delete ${state.selectedMonth}")
+                        Text("Delete $monthLabel")
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onDeleteOlder, modifier = Modifier.fillMaxWidth()) {
-                        Text("Delete everything before ${state.selectedMonth}")
+                        Text("Delete everything before $monthLabel")
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(

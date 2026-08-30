@@ -124,8 +124,10 @@ class EventStore(filesDir: File) {
             if (doomed.isEmpty()) return@forEach
             doomed.forEach { json.remove(it) }
             removed += doomed.size
-            runCatching { file.writeText(json.toString(), Charsets.UTF_8) }
-                .onFailure { Log.w(TAG, "Could not rewrite daily totals for $month", it) }
+            runCatching {
+                // A month left with nothing in it is deleted rather than kept as an empty shell.
+                if (json.length() == 0) file.delete() else file.writeText(json.toString(), Charsets.UTF_8)
+            }.onFailure { Log.w(TAG, "Could not rewrite daily totals for $month", it) }
         }
         return removed
     }
@@ -152,14 +154,19 @@ class EventStore(filesDir: File) {
 
     // ------------------------------------------------------------- management
 
-    /** Months that hold data, newest first. */
+    /**
+     * Months that hold data, newest first. Files emptied by [pruneImplausibleDays] are ignored
+     * so removed history stops showing up as a month with nothing in it.
+     */
     fun months(): List<String> {
         val keys = LinkedHashSet<String>()
-        listOf(eventsDir, dailyDir).forEach { dir ->
-            dir.listFiles()?.forEach { file ->
-                val key = file.name.substringBeforeLast('.')
-                if (MonthKeys.parseMonth(key) != null) keys.add(key)
-            }
+        eventsDir.listFiles()?.forEach { file ->
+            val key = file.name.substringBeforeLast('.')
+            if (MonthKeys.parseMonth(key) != null && file.length() > 0L) keys.add(key)
+        }
+        dailyDir.listFiles()?.forEach { file ->
+            val key = file.name.substringBeforeLast('.')
+            if (MonthKeys.parseMonth(key) != null && readJson(file).length() > 0) keys.add(key)
         }
         return keys.sortedDescending()
     }
