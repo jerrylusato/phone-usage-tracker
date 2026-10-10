@@ -103,7 +103,7 @@ Needs JDK 21 and Android SDK platform 36. GitHub CI provisions the SDK automatic
 ```
 
 Release signing reads `keystore.properties` and `release.keystore` from the repository root.
-Both are gitignored. Local builds use them; automated releases use encrypted GitHub Actions secrets. **Keep a backup**:
+Both are gitignored. Local builds use them; automated releases use encrypted secrets in the approval-protected `release` environment. **Keep a backup**:
 Android will refuse to update an installed APK that is signed with a different key. Release builds fail when signing configuration is missing.
 
 ## Weeks

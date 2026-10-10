@@ -33,8 +33,13 @@ copies. Local release builds still read gitignored `keystore.properties` and the
 A release build now fails when signing configuration is missing; it no longer silently
 produces an unsigned package. CI accepts environment variables with the same values.
 
-Configure these encrypted GitHub Actions repository secrets through `gh secret set` or
-GitHub Settings → Secrets and variables → Actions:
+The `release` GitHub environment holds the signing secrets and requires approval from
+`jerrylusato` before its job can start. Only `v*` tags may use this environment; branches
+and pull requests cannot. The owner may approve their own release, but administrator
+bypass is disabled. Review the tagged commit and workflow before approving a deployment.
+
+Configure these encrypted environment secrets through `gh secret set --env release` or
+GitHub Settings → Environments → release:
 
 - `ANDROID_KEYSTORE_BASE64`: base64 of the existing keystore.
 - `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
@@ -62,3 +67,10 @@ gh attestation verify phone-usage-1.1.1.apk --repo jerrylusato/phone-usage-track
 GitHub Releases provide permanent download URLs; Actions artifacts are for verification,
 not the public download channel. Android updates remain manual APK installations.
 Download the newer APK and install over the existing app to retain local history.
+
+## Repository protections
+
+`main` requires a pull request and a successful `android` check, including for administrators.
+Force pushes and deletion are disabled. Workflow and signing configuration changes have
+`jerrylusato` as code owner. A solo maintainer can merge their own verified pull request;
+the separate release approval remains mandatory.
