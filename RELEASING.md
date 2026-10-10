@@ -6,8 +6,8 @@ https://usage.jerrylusato.com; it discovers published release packages automatic
 ## Checks and versioning
 
 Pull requests and pushes to `main` run unit tests, Android lint, and a debug build on
-Ubuntu with Java 21, Android SDK 36, and Build Tools 36.1.0. Actions are pinned to commit
-revisions, including Gradle wrapper validation. Dependabot maintains action dependencies.
+Ubuntu with Java 21, explicitly provisioned Android SDK 36, and Build Tools 36.1.0.
+Actions are pinned to commit revisions, including Gradle wrapper validation. Dependabot maintains action dependencies.
 Signing secrets are only used by the tag release workflow, never by pull requests.
 
 Update `versionName` and increment `versionCode` in `app/build.gradle.kts`, update the

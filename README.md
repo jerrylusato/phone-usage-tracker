@@ -93,7 +93,7 @@ Uninstalling the app deletes all of it. Export first if you want to keep it.
 
 ## Build
 
-Needs JDK 21 and Android SDK platform 36.
+Needs JDK 21 and Android SDK platform 36. GitHub CI provisions the SDK automatically.
 
 ```bash
 ./gradlew :app:assembleDebug            # debug APK
