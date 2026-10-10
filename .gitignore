@@ -16,3 +16,6 @@ keystore.properties
 .idea/
 *.iml
 .DS_Store
+
+# Release packages
+dist/

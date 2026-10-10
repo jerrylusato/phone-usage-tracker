@@ -103,9 +103,8 @@ Needs JDK 21 and Android SDK platform 36.
 ```
 
 Release signing reads `keystore.properties` and `release.keystore` from the repository root.
-Both are gitignored, and they exist only on the machine that built the APK. **Keep a backup**:
-Android will refuse to update an installed APK that is signed with a different key. Without
-those files `assembleRelease` still runs, producing an unsigned APK.
+Both are gitignored. Local builds use them; automated releases use encrypted GitHub Actions secrets. **Keep a backup**:
+Android will refuse to update an installed APK that is signed with a different key. Release builds fail when signing configuration is missing.
 
 ## Weeks
 
@@ -132,3 +131,9 @@ ui/      Compose dashboard, history and settings screens
   next open it. The platform's history means little or nothing is actually lost.
 - Names for apps you cannot launch (some system components) fall back to the package name; the
   app asks only for launcher-app visibility instead of `QUERY_ALL_PACKAGES`.
+
+## Public releases
+
+MIT licensed. Get verified release downloads and installation help at
+[usage.jerrylusato.com](https://usage.jerrylusato.com). See [RELEASING.md](RELEASING.md)
+for tag-based CI releases, signing prerequisites, checksums, and provenance verification.
